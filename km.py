@@ -1,6 +1,9 @@
 import os
+import re
 import glob
+import subprocess
 from PIL import Image, ImageDraw, ImageFont
+from tqdm import tqdm
 from utils.font_size import FontSize
 
 # 布局中心坐标
@@ -73,6 +76,45 @@ def draw_marker(bg, seq, sub_seq, km_text, hm_text):
     return image
 
 
+def compose_video(output_dir, video_name, fps=30):
+    files = [f for f in os.listdir(output_dir) if f.endswith('.png')]
+    if not files:
+        print('output目录下没有找到PNG文件')
+        return
+
+    files.sort(key=lambda f: int(re.match(r'(\d+)', f).group(1)))
+    frames = [os.path.join(output_dir, f) for f in files]
+
+    with Image.open(frames[0]) as img:
+        width, height = img.size
+    print(f'帧数: {len(frames)}, 尺寸: {width}x{height}, 帧率: {fps}')
+
+    list_file = os.path.join(output_dir, '_filelist.txt')
+    with open(list_file, 'w', encoding='utf-8') as f:
+        for frame in frames:
+            abs_path = os.path.abspath(frame).replace('\\', '/')
+            f.write(f"file '{abs_path}'\n")
+            f.write(f'duration {1 / fps}\n')
+
+    video_path = f'{video_name}.mov'
+    cmd = [
+        'ffmpeg', '-y',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', list_file,
+        '-c:v', 'png',
+        '-pix_fmt', 'rgba',
+        '-r', str(fps),
+        '-s', f'{width}x{height}',
+        video_path,
+    ]
+
+    print(f'正在合成视频: {video_path}')
+    subprocess.run(cmd, check=True)
+    os.remove(list_file)
+    print('视频合成完成')
+
+
 if __name__ == '__main__':
     output_dir = 'output'
     if os.path.exists(output_dir):
@@ -87,9 +129,21 @@ if __name__ == '__main__':
     km_start = 1699
     km_end = 1720
 
+    total = (km_end - km_start + 1) * 10
     count = 0
-    for km in range(km_start, km_end + 1):
-        for hm in range(10):
-            image = draw_marker(bg, seq, sub_seq, str(km), str(hm))
-            image.save(f'output/{count}.png')
-            count += 1
+    with tqdm(total=total, desc='生成帧图片') as pbar:
+        for km in range(km_start, km_end + 1):
+            for hm in range(10):
+                image = draw_marker(bg, seq, sub_seq, str(km), str(hm))
+                image.save(f'{output_dir}/{count}.png')
+                count += 1
+                pbar.update(1)
+
+    video_name = f'km_{seq}{sub_seq}_K{km_start}-K{km_end}'
+    compose_video(output_dir, video_name)
+
+    # 清理output目录
+    for f in glob.glob(os.path.join(output_dir, '*')):
+        os.remove(f)
+    os.rmdir(output_dir)
+    print('已清理output目录')
