@@ -124,10 +124,10 @@ if __name__ == '__main__':
         os.makedirs(output_dir)
 
     bg = Image.open('resources/bg.png')
-    seq = 'G15'
-    sub_seq = '23'
-    km_start = 1699
-    km_end = 1720
+    seq = 'G10'
+    sub_seq = ''
+    km_start = 0
+    km_end = 346
 
     total = (km_end - km_start + 1) * 10
     count = 0
